@@ -16,8 +16,8 @@ import re
 # ============= НАСТРОЙКИ =============
 # Переменные окружения для безопасности (настройте на Render)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8302303298:AAGH3Nllv4JaQRoi8Em8rO1-L_zGinN-gVM")
-CHAT_ID = os.getenv("CHAT_ID", "-1003407248691")
-SEARCH_TIME = time(hour=7, minute=0)  # 07:00 UTC = 09:00 Киев
+CHAT_ID = os.getenv("CHAT_ID", "-1003686632666")  # Новая группа
+SEARCH_TIME = time(hour=11, minute=0)  # 11:00 UTC = 13:00 Киев (1 час дня)
 PORT = int(os.getenv("PORT", 10000))
 
 # Telegram каналы для мониторинга (публичные ссылки)
@@ -442,7 +442,7 @@ class TelegramJobBot:
     async def run(self):
         """Запустить бота"""
         logger.info("Бот запущен!")
-        logger.info(f"Время отправки: {SEARCH_TIME}")
+        logger.info(f"Время отправки: {SEARCH_TIME} (13:00 Киев)")
         logger.info(f"Мониторинг каналов: {', '.join(['@' + ch for ch in TELEGRAM_CHANNELS])}")
         
         # Проверяем переменную окружения для тестового запуска
@@ -454,9 +454,8 @@ class TelegramJobBot:
             logger.info("✅ Тестовое сообщение отправлено. Завершение работы.")
             return
         
-        # Первая отправка сразу при запуске
-        logger.info("Отправляю первое сообщение...")
-        await self.send_daily_report()
+        # НЕ отправляем сразу - только по расписанию
+        logger.info("Ожидаю расписания (13:00 Киев)...")
         
         await self.scheduled_task()
 
