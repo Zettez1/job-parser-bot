@@ -3,6 +3,7 @@ import logging
 import os
 from datetime import datetime, time
 import aiohttp
+from aiohttp import web
 from bs4 import BeautifulSoup
 from telegram import Bot
 import re
@@ -12,6 +13,7 @@ import re
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8302303298:AAGH3Nllv4JaQRoi8Em8rO1-L_zGinN-gVM")
 CHAT_ID = os.getenv("CHAT_ID", "-1003407248691")
 SEARCH_TIME = time(hour=7, minute=0)  # 07:00 UTC = 09:00 Киев
+PORT = int(os.getenv("PORT", 10000))
 
 # Telegram каналы для мониторинга (публичные ссылки)
 TELEGRAM_CHANNELS = [
@@ -327,8 +329,30 @@ class TelegramJobBot:
         await self.scheduled_task()
 
 
+async def health_check(request):
+    """Health check endpoint для Render"""
+    return web.Response(text="OK")
+
+
+async def start_web_server():
+    """Запуск веб-сервера для health check"""
+    app = web.Application()
+    app.router.add_get("/", health_check)
+    app.router.add_get("/health", health_check)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    logger.info(f"Web сервер запущен на порту {PORT}")
+
+
 async def main():
     """Главная функция"""
+    # Запускаем веб-сервер для health check
+    await start_web_server()
+    
+    # Запускаем бота
     bot = TelegramJobBot(BOT_TOKEN, CHAT_ID)
     await bot.run()
 
