@@ -14,6 +14,7 @@ from telegram import Bot
 # Telegram Bot для отправки результатов
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8302303298:AAGH3Nllv4JaQRoi8Em8rO1-L_zGinN-gVM")
 CHAT_ID = os.getenv("CHAT_ID", "-1003407248691")
+MESSAGE_THREAD_ID = os.getenv("MESSAGE_THREAD_ID", None)  # ID темы (топика) для отправки
 
 # Telethon API (получить на my.telegram.org)
 API_ID = int(os.getenv("API_ID", "0"))
@@ -176,8 +177,15 @@ async def send_results(results):
             if len(message) > 3500:
                 break
                 
-    await bot.send_message(chat_id=CHAT_ID, text=message, disable_web_page_preview=True)
-    logger.info("✅ Сообщение отправлено")
+    # Отправляем в тему если указан MESSAGE_THREAD_ID
+    thread_id = int(MESSAGE_THREAD_ID) if MESSAGE_THREAD_ID else None
+    await bot.send_message(
+        chat_id=CHAT_ID, 
+        text=message, 
+        disable_web_page_preview=True,
+        message_thread_id=thread_id
+    )
+    logger.info(f"✅ Сообщение отправлено" + (f" в тему {thread_id}" if thread_id else ""))
 
 
 async def main():
