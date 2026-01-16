@@ -81,12 +81,19 @@ class JobParser:
         ]
         
     async def parse_workua_resumes(self):
-        """Парсинг резюме с Work.ua - РАБОЧИЙ МЕТОД"""
+        """Парсинг резюме с Work.ua - ТОЛЬКО сварщики и разнорабочие"""
         results = []
         
+        # ТОЛЬКО профильные запросы
         urls = [
-            "https://www.work.ua/resumes-zhytomyr/",
             "https://www.work.ua/resumes-zhytomyr-%D1%81%D0%B2%D0%B0%D1%80%D1%89%D0%B8%D0%BA/",  # сварщик
+            "https://www.work.ua/resumes-zhytomyr-%D1%80%D0%B0%D0%B1%D0%BE%D1%87%D0%B8%D0%B9/",  # рабочий
+        ]
+        
+        # Ключевые слова для фильтрации (ТОЛЬКО нужные профессии)
+        target_keywords = [
+            "сварщик", "зварник", "сварювальник", "зварювальник", "електрозварник", "электрозварщик",
+            "разнорабочий", "різноробочий", "подсобник", "підсобник", "робітник", "рабочий"
         ]
         
         async with aiohttp.ClientSession() as session:
@@ -107,13 +114,19 @@ class JobParser:
                             resumes = soup.find_all(['div', 'article'], class_=re.compile('.*resume.*|.*card.*'))
                             logger.info(f"Work.ua: найдено {len(resumes)} резюме")
                             
-                            for resume in resumes[:10]:
+                            for resume in resumes[:20]:
                                 try:
                                     title_elem = resume.find(['h2', 'h3', 'a'])
                                     if not title_elem:
                                         continue
                                     
                                     title = title_elem.get_text(strip=True)
+                                    title_lower = title.lower()
+                                    
+                                    # ФИЛЬТР: только если есть нужные ключевые слова
+                                    if not any(kw in title_lower for kw in target_keywords):
+                                        continue
+                                    
                                     link = title_elem.get('href', '') if title_elem.name == 'a' else ''
                                     
                                     if not link:
@@ -270,6 +283,73 @@ class JobParser:
             
         return results
     
+    async def parse_olx_search(self):
+        """Парсинг OLX через поиск - РАБОЧИЙ МЕТОД"""
+        results = []
+        
+        # Поисковые запросы
+        queries = [
+            "сварщик житомир",
+            "різноробочий житомир",
+        ]
+        
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept-Language': 'uk-UA,uk;q=0.9',
+            }
+            
+            for query in queries:
+                try:
+                    import urllib.parse
+                    encoded = urllib.parse.quote(query)
+                    url = f"https://www.olx.ua/uk/list/q-{encoded}/"
+                    
+                    logger.info(f"OLX: поиск '{query}'")
+                    async with session.get(url, headers=headers, timeout=15) as response:
+                        if response.status == 200:
+                            html = await response.text()
+                            soup = BeautifulSoup(html, 'html.parser')
+                            
+                            ads = soup.find_all('div', {'data-cy': 'l-card'})
+                            logger.info(f"OLX: найдено {len(ads)} объявлений")
+                            
+                            for ad in ads[:10]:
+                                try:
+                                    title_elem = ad.find('h6')
+                                    if not title_elem:
+                                        continue
+                                    
+                                    title = title_elem.get_text(strip=True)
+                                    
+                                    # Ссылка
+                                    link_elem = ad.find('a', href=True)
+                                    link = link_elem.get('href', '') if link_elem else ''
+                                    if link and not link.startswith('http'):
+                                        link = 'https://www.olx.ua' + link
+                                    
+                                    # Фильтр: только сварщики и разнорабочие
+                                    title_lower = title.lower()
+                                    target_words = ["сварщик", "зварник", "зварювальник", "різноробочий", "разнорабочий"]
+                                    
+                                    if any(w in title_lower for w in target_words):
+                                        results.append({
+                                            'name': title,
+                                            'link': link,
+                                            'source': 'OLX'
+                                        })
+                                        logger.info(f"✓ {title[:60]}...")
+                                        
+                                except:
+                                    continue
+                                    
+                except Exception as e:
+                    logger.error(f"Ошибка OLX: {e}")
+                
+                await asyncio.sleep(2)
+        
+        return results
+    
     async def get_all_candidates(self):
         """Собрать всех кандидатов из всех источников"""
         all_candidates = []
@@ -278,6 +358,11 @@ class JobParser:
         logger.info("🔍 Парсинг Work.ua...")
         workua_results = await self.parse_workua_resumes()
         all_candidates.extend(workua_results)
+        
+        # Парсим OLX (РАБОТАЕТ!)
+        logger.info("🔍 Парсинг OLX...")
+        olx_results = await self.parse_olx_search()
+        all_candidates.extend(olx_results)
         
         # Удаляем дубликаты по ссылкам
         seen = set()
@@ -326,7 +411,7 @@ class TelegramJobBot:
                     message += f"... и ещё {len(candidates) - i} резюме"
                     break
             
-            message += "\n💼 Источник: Work.ua"
+            message += "\n💼 Источники: Work.ua, OLX"
         
         try:
             bot = Bot(token=self.token)
