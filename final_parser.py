@@ -11,7 +11,7 @@ import logging
 
 BOT_TOKEN = "8302303298:AAGH3Nllv4JaQRoi8Em8rO1-L_zGinN-gVM"
 CHAT_ID = "-1003407248691"
-
+MESSAGE_THREAD_ID = int(os.getenv("MESSAGE_THREAD_ID", "187"))
 # ТОЛЬКО эти ключевые слова
 KEYWORDS = [
     "сварщик", "зварник", "сварювальник",
