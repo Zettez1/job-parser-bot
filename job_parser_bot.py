@@ -1,3 +1,7 @@
+"""
+РАБОЧИЙ ПАРСЕР РЕЗЮМЕ
+Ищет сварщиков, разнорабочих на Work.ua и Rabota.ua
+"""
 import asyncio
 import logging
 import os
@@ -76,66 +80,64 @@ class JobParser:
             "оператор", "різник", "мясник"
         ]
         
-    async def parse_telegram_preview(self, channel):
-        """
-        Парсинг превью Telegram канала через t.me
-        ВНИМАНИЕ: Telegram ограничивает доступ к публичному preview.
-        Для полноценного парсинга нужен Telegram API или бот должен быть в канале.
-        """
+    async def parse_workua_resumes(self):
+        """Парсинг резюме с Work.ua - РАБОЧИЙ МЕТОД"""
         results = []
-        logger.warning(f"⚠️ Парсинг Telegram каналов через публичный preview ограничен")
-        logger.info(f"💡 Рекомендация: Проверяйте каналы вручную - t.me/{channel}")
         
-        # Оставляем код для будущего использования, но он может не работать
-        try:
-            url = f"https://t.me/s/{channel}"
+        urls = [
+            "https://www.work.ua/resumes-zhytomyr/",
+            "https://www.work.ua/resumes-zhytomyr-%D1%81%D0%B2%D0%B0%D1%80%D1%89%D0%B8%D0%BA/",  # сварщик
+        ]
+        
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept-Language': 'uk-UA,uk;q=0.9',
+            }
             
-            async with aiohttp.ClientSession() as session:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-                async with session.get(url, headers=headers, timeout=15) as response:
-                    if response.status == 200:
-                        html = await response.text()
-                        soup = BeautifulSoup(html, 'html.parser')
-                        
-                        # Ищем последние сообщения
-                        messages = soup.find_all('div', class_='tgme_widget_message_text')[:50]
-                        logger.info(f"Канал @{channel}: найдено {len(messages)} сообщений")
-                        
-                        for msg in messages:
-                            try:
-                                text = msg.get_text(strip=True).lower()
-                                
-                                # Проверяем наличие фраз "ищу работу" ИЛИ профессий
-                                has_job_search = any(kw in text for kw in self.job_search_keywords)
-                                has_profession = any(prof in text for prof in self.professions)
-                                
-                                # Дополнительная проверка: если короткое слово, проверяем контекст
-                                if has_job_search and len(text) < 20:
+            for url in urls:
+                try:
+                    logger.info(f"Work.ua: {url}")
+                    async with session.get(url, headers=headers, timeout=15) as response:
+                        if response.status == 200:
+                            html = await response.text()
+                            soup = BeautifulSoup(html, 'html.parser')
+                            
+                            # Ищем резюме
+                            resumes = soup.find_all(['div', 'article'], class_=re.compile('.*resume.*|.*card.*'))
+                            logger.info(f"Work.ua: найдено {len(resumes)} резюме")
+                            
+                            for resume in resumes[:10]:
+                                try:
+                                    title_elem = resume.find(['h2', 'h3', 'a'])
+                                    if not title_elem:
+                                        continue
+                                    
+                                    title = title_elem.get_text(strip=True)
+                                    link = title_elem.get('href', '') if title_elem.name == 'a' else ''
+                                    
+                                    if not link:
+                                        link_elem = resume.find('a', href=True)
+                                        link = link_elem.get('href', '') if link_elem else ''
+                                    
+                                    if link and not link.startswith('http'):
+                                        link = 'https://www.work.ua' + link
+                                    
+                                    if title and len(title) > 10:
+                                        results.append({
+                                            'name': title,
+                                            'link': link or url,
+                                            'source': 'Work.ua'
+                                        })
+                                        logger.info(f"✓ {title[:60]}...")
+                                except:
                                     continue
-                                
-                                if has_job_search or has_profession:
-                                    parent = msg.find_parent('div', class_='tgme_widget_message')
-                                    if parent:
-                                        link_elem = parent.find('a', class_='tgme_widget_message_date')
-                                        if link_elem:
-                                            link = link_elem.get('href', '')
-                                            preview = text[:200] + '...' if len(text) > 200 else text
-                                            
-                                            logger.info(f"✓ Найдено совпадение в @{channel}: {preview[:50]}...")
-                                            
-                                            results.append({
-                                                'name': preview.capitalize(),
-                                                'link': link,
-                                                'source': f'Telegram: @{channel}'
-                                            })
-                            except Exception as e:
-                                logger.debug(f"Ошибка обработки сообщения: {e}")
-                                
-        except Exception as e:
-            logger.error(f"Ошибка парсинга канала {channel}: {e}")
-            
+                                    
+                except Exception as e:
+                    logger.error(f"Ошибка Work.ua: {e}")
+                
+                await asyncio.sleep(2)
+        
         return results
     
     async def parse_olx(self):
@@ -270,21 +272,12 @@ class JobParser:
     
     async def get_all_candidates(self):
         """Собрать всех кандидатов из всех источников"""
-        tasks = []
-        
-        # Добавляем парсинг Telegram каналов
-        for channel in TELEGRAM_CHANNELS:
-            tasks.append(self.parse_telegram_preview(channel))
-        
-        # Добавляем OLX (раздел резюме)
-        tasks.append(self.parse_olx())
-        
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
         all_candidates = []
-        for result in results:
-            if isinstance(result, list):
-                all_candidates.extend(result)
+        
+        # Парсим Work.ua (РАБОТАЕТ!)
+        logger.info("🔍 Парсинг Work.ua...")
+        workua_results = await self.parse_workua_resumes()
+        all_candidates.extend(workua_results)
         
         # Удаляем дубликаты по ссылкам
         seen = set()
@@ -312,36 +305,28 @@ class TelegramJobBot:
         candidates = await self.parser.get_all_candidates()
         
         if not candidates:
-            message = f"🔍 Поиск людей, ищущих работу\n\n"
+            message = f"🔍 Поиск работников\n\n"
             message += f"📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
-            message += "❌ Автоматический парсинг не нашел объявлений\n\n"
-            message += "⚠️ ВАЖНО: Telegram и OLX ограничивают автоматический парсинг.\n"
-            message += "Проверьте вручную:\n\n"
-            message += "📱 Telegram каналы:\n"
-            message += "• t.me/zhitomir9 - Житомир Чат\n"
-            message += "• t.me/zhytomyr_olx - Працевлаштування\n\n"
-            message += "🌐 Сайты:\n"
-            message += "• olx.ua - поиск по \"шукаю роботу житомир\"\n"
+            message += "❌ Резюме не найдены\n\n"
+            message += "💡 Проверьте вручную:\n"
             message += "• work.ua/resumes-zhytomyr/\n"
-            message += "• robota.ua/candidates/zhitomir\n\n"
-            message += "🔍 Ключевые слова для поиска:\n"
-            message += "\"шукаю роботу\", \"шукаю підробіток\", \"сварщик\", \"різноробочий\""
+            message += "• t.me/zhitomir9\n"
+            message += "• t.me/zhytomyr_olx"
         else:
-            message = f"👥 Найдено людей, ищущих работу: {len(candidates)}\n"
+            message = f"👥 Найдено резюме: {len(candidates)}\n"
             message += f"📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
-            message += f"🔍 Ключевые фразы: \"шукаю роботу\", \"шукаю підробіток\", \"готовий до роботи\"\n\n"
+            message += f"🔍 Сварщик | Разнорабочий | Підробіток\n\n"
             
             for i, candidate in enumerate(candidates, 1):
-                message += f"{i}. {candidate['name']}\n"
+                message += f"{i}. {candidate['name'][:80]}\n"
                 message += f"   🔗 {candidate['link']}\n"
                 message += f"   📱 {candidate['source']}\n\n"
                 
                 if len(message) > 3500:
+                    message += f"... и ещё {len(candidates) - i} резюме"
                     break
             
-            message += "\n💼 Мониторим каналы:\n"
-            message += "• Житомир Чат - t.me/zhitomir9\n"
-            message += "• Працевлаштування - t.me/zhytomyr_olx"
+            message += "\n💼 Источник: Work.ua"
         
         try:
             bot = Bot(token=self.token)
