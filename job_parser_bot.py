@@ -18,6 +18,7 @@ import re
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8302303298:AAGH3Nllv4JaQRoi8Em8rO1-L_zGinN-gVM")
 CHAT_ID = os.getenv("CHAT_ID", "-1003686632666")  # Новая группа
 MESSAGE_THREAD_ID = os.getenv("MESSAGE_THREAD_ID", None)  # ID темы HR(AI)
+SEND_STARTUP_MSG = os.getenv("SEND_STARTUP_MSG", "false").lower() == "true"  # Отправлять приветствие
 SEARCH_TIME = time(hour=11, minute=0)  # 11:00 UTC = 13:00 Киев (1 час дня)
 PORT = int(os.getenv("PORT", 10000))
 
@@ -483,8 +484,11 @@ class TelegramJobBot:
             logger.info("✅ Тестовое сообщение отправлено. Завершение работы.")
             return
         
-        # Отправляем приветственное сообщение при запуске
-        await self.send_startup_message()
+        # Отправляем приветственное сообщение только если SEND_STARTUP_MSG=true
+        if SEND_STARTUP_MSG:
+            await self.send_startup_message()
+        else:
+            logger.info("Приветственное сообщение отключено (SEND_STARTUP_MSG=false)")
         
         # Ждём расписания
         logger.info("Ожидаю расписания (13:00 Киев)...")
