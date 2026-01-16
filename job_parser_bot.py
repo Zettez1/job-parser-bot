@@ -439,10 +439,27 @@ class TelegramJobBot:
             await asyncio.sleep(wait_seconds)
             await self.send_daily_report()
     
+    async def send_startup_message(self):
+        """Отправить сообщение о запуске"""
+        message = "🤖 AI Head Hunter deployed\n\n"
+        message += "✅ Бот успешно запущен на Render\n"
+        message += f"📅 Время отправки: 13:00 Киев (каждый день)\n"
+        message += f"🔍 Источники: Work.ua, OLX\n"
+        message += f"💼 Ищу: Сварщики, Разнорабочие\n\n"
+        message += f"Следующий отчёт: сегодня в 13:00"
+        
+        try:
+            bot = Bot(token=self.token)
+            await bot.send_message(chat_id=self.chat_id, text=message)
+            logger.info("✅ Приветственное сообщение отправлено")
+        except Exception as e:
+            logger.error(f"Ошибка отправки приветствия: {e}")
+    
     async def run(self):
         """Запустить бота"""
         logger.info("Бот запущен!")
         logger.info(f"Время отправки: {SEARCH_TIME} (13:00 Киев)")
+        logger.info(f"Chat ID: {self.chat_id}")
         logger.info(f"Мониторинг каналов: {', '.join(['@' + ch for ch in TELEGRAM_CHANNELS])}")
         
         # Проверяем переменную окружения для тестового запуска
@@ -454,7 +471,10 @@ class TelegramJobBot:
             logger.info("✅ Тестовое сообщение отправлено. Завершение работы.")
             return
         
-        # НЕ отправляем сразу - только по расписанию
+        # Отправляем приветственное сообщение при запуске
+        await self.send_startup_message()
+        
+        # Ждём расписания
         logger.info("Ожидаю расписания (13:00 Киев)...")
         
         await self.scheduled_task()
