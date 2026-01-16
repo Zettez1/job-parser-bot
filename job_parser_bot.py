@@ -31,16 +31,30 @@ logger = logging.getLogger(__name__)
 
 
 class JobParser:
-    """Парсер для поиска работников"""
+    """Парсер для поиска людей, которые ищут работу"""
     
     def __init__(self):
         self.city = "житомир"
-        # Ключевые слова для поиска
-        self.keywords = [
+        # Ключевые фразы для поиска людей, ищущих работу
+        self.job_search_keywords = [
+            "шукаю роботу", "шукаю підробіток", "шукаю підзаробіток",
+            "шукаю работу", "шукаю робот",
+            "ищу работу", "ищу подработку", "ищу заработок",
+            "готовий до роботи", "готов к работе", "готовий працювати",
+            "хочу працювати", "хочу работать",
+            "потрібна робота", "нужна работа",
+            "розгляну пропозиції", "рассмотрю предложения"
+        ]
+        
+        # Профессии (опционально)
+        self.professions = [
             "сварщик", "зварник", "сварювальник",
-            "робота", "работа", "робочі", "рабочие",
-            "шукаю роботу", "ищу работу",
-            "чоловік", "мужчина", "парень", "хлопець"
+            "робітник", "рабочий", "працівник",
+            "будівельник", "строитель",
+            "водій", "водитель", "шофер",
+            "вантажник", "грузчик",
+            "слюсар", "слесарь",
+            "електрик", "электрик"
         ]
         
     async def parse_telegram_preview(self, channel):
@@ -65,24 +79,23 @@ class JobParser:
                             try:
                                 text = msg.get_text(strip=True).lower()
                                 
-                                # Проверяем наличие города и ключевых слов
-                                if self.city in text:
-                                    if any(kw in text for kw in self.keywords):
-                                        # Получаем ссылку на сообщение
-                                        parent = msg.find_parent('div', class_='tgme_widget_message')
-                                        if parent:
-                                            link_elem = parent.find('a', class_='tgme_widget_message_date')
-                                            if link_elem:
-                                                link = link_elem.get('href', '')
-                                                
-                                                # Обрезаем текст для превью
-                                                preview = text[:150] + '...' if len(text) > 150 else text
-                                                
-                                                results.append({
-                                                    'name': preview.capitalize(),
-                                                    'link': link,
-                                                    'source': f'Telegram: @{channel}'
-                                                })
+                                # Проверяем наличие фраз "ищу работу"
+                                if any(kw in text for kw in self.job_search_keywords):
+                                    # Получаем ссылку на сообщение
+                                    parent = msg.find_parent('div', class_='tgme_widget_message')
+                                    if parent:
+                                        link_elem = parent.find('a', class_='tgme_widget_message_date')
+                                        if link_elem:
+                                            link = link_elem.get('href', '')
+                                            
+                                            # Обрезаем текст для превью
+                                            preview = text[:200] + '...' if len(text) > 200 else text
+                                            
+                                            results.append({
+                                                'name': preview.capitalize(),
+                                                'link': link,
+                                                'source': f'Telegram: @{channel}'
+                                            })
                             except Exception as e:
                                 logger.debug(f"Ошибка обработки сообщения: {e}")
                                 
@@ -222,12 +235,8 @@ class JobParser:
         for channel in TELEGRAM_CHANNELS:
             tasks.append(self.parse_telegram_preview(channel))
         
-        # Добавляем другие источники
-        tasks.extend([
-            self.parse_olx(),
-            self.parse_rabotaua_lite(),
-            self.parse_workua_lite(),
-        ])
+        # OLX, Work.ua, Rabota.ua - это сайты ВАКАНСИЙ, не резюме
+        # Поэтому отключаем их парсинг
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -262,19 +271,16 @@ class TelegramJobBot:
         candidates = await self.parser.get_all_candidates()
         
         if not candidates:
-            message = f"🔍 Поиск работников в Житомире\n\n"
+            message = f"🔍 Поиск людей, ищущих работу\n\n"
             message += f"📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
             message += "❌ Новых объявлений не найдено\n\n"
-            message += "💡 Рекомендую проверить вручную:\n"
+            message += "💡 Мониторим каналы:\n"
             message += "• t.me/zhitomir9\n"
             message += "• t.me/zhytomyr_olx\n"
-            message += "• OLX - olx.ua/d/uk/robota/zhitomir/\n"
-            message += "• Work.ua - work.ua/jobs-zhytomyr/"
         else:
-            message = f"🔍 Найдено объявлений: {len(candidates)}\n"
-            message += f"📍 Город: Житомир\n"
+            message = f"👥 Найдено людей, ищущих работу: {len(candidates)}\n"
             message += f"📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
-            message += f"👥 Ищем: сварщики, рабочие, мужчины 17-50 лет\n\n"
+            message += f"🔍 Ключевые фразы: \"шукаю роботу\", \"шукаю підробіток\", \"готовий до роботи\"\n\n"
             
             for i, candidate in enumerate(candidates, 1):
                 message += f"{i}. {candidate['name']}\n"
@@ -284,11 +290,9 @@ class TelegramJobBot:
                 if len(message) > 3500:
                     break
             
-            message += "\n💼 Полезные каналы и сайты:\n"
+            message += "\n💼 Мониторим каналы:\n"
             message += "• Житомир Чат - t.me/zhitomir9\n"
-            message += "• Працевлаштування - t.me/zhytomyr_olx\n"
-            message += "• OLX - olx.ua/d/uk/robota/zhitomir/\n"
-            message += "• Work.ua - work.ua/jobs-zhytomyr/"
+            message += "• Працевлаштування - t.me/zhytomyr_olx"
         
         try:
             bot = Bot(token=self.token)
