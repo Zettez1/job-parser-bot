@@ -17,6 +17,7 @@ import re
 # Переменные окружения для безопасности (настройте на Render)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8302303298:AAGH3Nllv4JaQRoi8Em8rO1-L_zGinN-gVM")
 CHAT_ID = os.getenv("CHAT_ID", "-1003686632666")  # Новая группа
+MESSAGE_THREAD_ID = os.getenv("MESSAGE_THREAD_ID", None)  # ID темы HR(AI)
 SEARCH_TIME = time(hour=11, minute=0)  # 11:00 UTC = 13:00 Киев (1 час дня)
 PORT = int(os.getenv("PORT", 10000))
 
@@ -415,8 +416,14 @@ class TelegramJobBot:
         
         try:
             bot = Bot(token=self.token)
-            await bot.send_message(chat_id=self.chat_id, text=message, disable_web_page_preview=True)
-            logger.info("Сообщение успешно отправлено")
+            thread_id = int(MESSAGE_THREAD_ID) if MESSAGE_THREAD_ID else None
+            await bot.send_message(
+                chat_id=self.chat_id, 
+                text=message, 
+                disable_web_page_preview=True,
+                message_thread_id=thread_id
+            )
+            logger.info(f"Сообщение успешно отправлено" + (f" в тему {thread_id}" if thread_id else ""))
         except Exception as e:
             logger.error(f"Ошибка отправки: {e}")
     
@@ -450,7 +457,12 @@ class TelegramJobBot:
         
         try:
             bot = Bot(token=self.token)
-            await bot.send_message(chat_id=self.chat_id, text=message)
+            thread_id = int(MESSAGE_THREAD_ID) if MESSAGE_THREAD_ID else None
+            await bot.send_message(
+                chat_id=self.chat_id, 
+                text=message,
+                message_thread_id=thread_id
+            )
             logger.info("✅ Приветственное сообщение отправлено")
         except Exception as e:
             logger.error(f"Ошибка отправки приветствия: {e}")
